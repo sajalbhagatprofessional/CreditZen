@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { CreditCard } from '../types';
-import { ExternalLink, Edit2, Trash2, Calendar, AlertTriangle, ShieldCheck, Key, Info, CreditCard as CardIcon } from 'lucide-react';
+import { ExternalLink, Edit2, Trash2, Calendar, AlertTriangle, ShieldCheck, Key, Info, CreditCard as CardIcon, Wallet } from 'lucide-react';
 import { differenceInDays, addMonths, setDate, startOfDay, isBefore } from 'date-fns';
 import { SecureCardModal } from './SecureCardModal';
 
@@ -19,6 +19,24 @@ export const CardList: React.FC<CardListProps> = ({ cards, onEdit, onDelete }) =
     if (newSet.has(id)) newSet.delete(id);
     else newSet.add(id);
     setExpandedNotes(newSet);
+  };
+
+  const handleOpenWallet = () => {
+    const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera;
+    if (/android/i.test(userAgent)) {
+      window.open('https://wallet.google.com', '_blank');
+    } else if (/iPad|iPhone|iPod/.test(userAgent) && !(window as any).MSStream) {
+      // Try to open Apple Wallet via scheme, fallback to alert
+      window.location.href = 'shoebox://';
+      setTimeout(() => {
+        // If the app didn't open (we are still here), show a message
+        // Note: This check is not perfect in modern browsers but is a common pattern
+        // For PWA, we can't easily know if it worked.
+        // We'll just let it try.
+      }, 500);
+    } else {
+      window.open('https://wallet.google.com', '_blank');
+    }
   };
 
   const getNextDate = (day?: number) => {
@@ -139,6 +157,9 @@ export const CardList: React.FC<CardListProps> = ({ cards, onEdit, onDelete }) =
 
                 {/* Buttons */}
                 <div className="flex gap-1">
+                    <button onClick={handleOpenWallet} className="p-2 bg-slate-800/50 hover:bg-emerald-500/20 hover:text-emerald-400 rounded-full transition-colors border border-slate-700/50" title="Open Wallet App">
+                       <Wallet className="w-4 h-4" />
+                    </button>
                     {card.paymentUrl && (
                       <a href={card.paymentUrl} target="_blank" rel="noopener noreferrer" className="p-2 bg-slate-800/50 hover:bg-emerald-500/20 hover:text-emerald-400 rounded-full transition-colors border border-slate-700/50">
                         <ExternalLink className="w-4 h-4" />

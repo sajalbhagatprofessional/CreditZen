@@ -37,17 +37,21 @@ export const saveUserData = async (userId: string, data: EncryptedPayload) => {
   // 2. Try to sync to Supabase (Backup)
   // We don't throw error if this fails, so the app continues working offline
   if (navigator.onLine) {
-      const { error } = await supabase
-        .from('user_data')
-        .upsert({ 
-          user_id: userId, 
-          iv: data.iv, 
-          ciphertext: data.ciphertext,
-          updated_at: new Date().toISOString()
-        });
-      
-      if (error) {
-        console.warn("Supabase Sync Error (Offline?):", error);
+      try {
+        const { error } = await supabase
+          .from('user_data')
+          .upsert({ 
+            user_id: userId, 
+            iv: data.iv, 
+            ciphertext: data.ciphertext,
+            updated_at: new Date().toISOString()
+          });
+        
+        if (error) {
+          console.warn("Supabase Sync Error (Offline?):", error);
+        }
+      } catch (err) {
+        console.warn("Supabase Network Error:", err);
       }
   }
 };
@@ -62,16 +66,21 @@ export const getUserDataRaw = async (userId: string): Promise<EncryptedPayload |
   
   // 1. Try to fetch from Supabase first to ensure we have latest data (Sync)
   if (navigator.onLine) {
-      const { data, error } = await supabase
-        .from('user_data')
-        .select('iv, ciphertext')
-        .eq('user_id', userId)
-        .single();
+      try {
+        const { data, error } = await supabase
+          .from('user_data')
+          .select('iv, ciphertext')
+          .eq('user_id', userId)
+          .single();
 
-      if (data && !error) {
-          // Update local cache
-          localStorage.setItem(localKey, JSON.stringify(data));
-          return data as EncryptedPayload;
+        if (data && !error) {
+            // Update local cache
+            localStorage.setItem(localKey, JSON.stringify(data));
+            return data as EncryptedPayload;
+        }
+      } catch (err) {
+        console.warn("Supabase Load Error (Network):", err);
+        // Fallthrough to local storage
       }
   }
 

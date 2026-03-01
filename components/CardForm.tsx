@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { CreditCard, CardCategory, Benefit, CardType, CardDocument } from '../types';
-import { X, Plus, Trash2, Lock, AlignLeft, Clock, FileText, Upload, Loader2, AlertCircle } from 'lucide-react';
+import { X, Plus, Trash2, Lock, AlignLeft, Clock, FileText, Upload, Loader2, AlertCircle, Camera } from 'lucide-react';
 import { getCategoryIcon, STANDARD_CATEGORIES } from '../constants';
-import { processCardDocument } from '../services/geminiService';
+import { processCardDocument, extractCardDetails } from '../services/geminiService';
 
 interface CardFormProps {
   initialData?: CreditCard;
@@ -25,6 +25,7 @@ export const CardForm: React.FC<CardFormProps> = ({ initialData, onSave, onCance
   const [newTempBenefit, setNewTempBenefit] = useState<Partial<Benefit>>({ multiplier: 1, category: '', expiryDate: '' });
   
   const [isProcessingDoc, setIsProcessingDoc] = useState(false);
+  const [isScanningCard, setIsScanningCard] = useState(false);
 
   const addBenefit = () => {
     if (newBenefit.category && newBenefit.multiplier) {
@@ -58,6 +59,40 @@ export const CardForm: React.FC<CardFormProps> = ({ initialData, onSave, onCance
       ...prev,
       temporaryBenefits: prev.temporaryBenefits?.filter((_, i) => i !== index)
     }));
+  };
+
+  const handleCardScan = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert("File is too large. Please upload an image under 5MB.");
+      return;
+    }
+
+    setIsScanningCard(true);
+    try {
+      const details = await extractCardDetails(file);
+      
+      setFormData(prev => ({
+        ...prev,
+        issuer: details.issuer || prev.issuer,
+        name: details.name || prev.name,
+        // Map network if needed, or just store it
+        lastFour: details.lastFour || prev.lastFour,
+        expiryDate: details.expiryDate || prev.expiryDate,
+        cardHolderName: details.cardholder || prev.cardHolderName
+      }));
+      
+      // If full number was somehow extracted (unlikely/unsafe via LLM usually, but if user wants)
+      // We generally avoid full number extraction for security unless explicitly requested.
+      
+    } catch (error: any) {
+      alert(`Scan failed: ${error.message}`);
+    } finally {
+      setIsScanningCard(false);
+      e.target.value = '';
+    }
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -127,9 +162,29 @@ export const CardForm: React.FC<CardFormProps> = ({ initialData, onSave, onCance
           <h2 className="text-xl font-bold text-white">
             {initialData ? 'Edit Card' : 'Add New Card'}
           </h2>
-          <button onClick={onCancel} className="p-2 hover:bg-slate-800 rounded-full text-slate-400">
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+             <div className="relative">
+                <input 
+                  type="file" 
+                  id="card-scan" 
+                  accept="image/*" 
+                  capture="environment"
+                  className="hidden" 
+                  onChange={handleCardScan}
+                  disabled={isScanningCard}
+                />
+                <label 
+                  htmlFor="card-scan" 
+                  className={`p-2 bg-slate-800 hover:bg-slate-700 rounded-full text-emerald-400 cursor-pointer transition-colors flex items-center justify-center ${isScanningCard ? 'opacity-50' : ''}`}
+                  title="Scan Card with Camera"
+                >
+                  {isScanningCard ? <Loader2 className="w-5 h-5 animate-spin" /> : <Camera className="w-5 h-5" />}
+                </label>
+             </div>
+             <button onClick={onCancel} className="p-2 hover:bg-slate-800 rounded-full text-slate-400">
+                <X className="w-5 h-5" />
+             </button>
+          </div>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">

@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-import { loginUser, registerUser } from '../services/authService';
-import { ShieldCheck, Lock, Mail, Loader2, AlertTriangle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { loginUser, registerUser, isBiometricEnabled, verifyBiometric, restoreSession } from '../services/authService';
+import { ShieldCheck, Lock, Mail, Loader2, AlertTriangle, Fingerprint } from 'lucide-react';
 
 interface AuthProps {
   onLoginSuccess: () => void;
@@ -13,6 +13,35 @@ export const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
+  const [showBiometric, setShowBiometric] = useState(false);
+
+  useEffect(() => {
+    if (isBiometricEnabled()) {
+      setShowBiometric(true);
+    }
+  }, []);
+
+  const handleBiometricLogin = async () => {
+    setLoading(true);
+    try {
+      const verified = await verifyBiometric();
+      if (verified) {
+        const restored = await restoreSession(true); // Skip check since we just verified
+        if (restored) {
+          onLoginSuccess();
+        } else {
+          setError("Session expired. Please login with password.");
+          setShowBiometric(false);
+        }
+      } else {
+        setError("Biometric verification failed.");
+      }
+    } catch (e) {
+      setError("Biometric error.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -64,6 +93,27 @@ export const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
         {message && (
           <div className="mb-4 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-sm text-emerald-400">
             {message}
+          </div>
+        )}
+
+        {showBiometric && mode === 'login' && (
+          <div className="mb-6">
+            <button
+              onClick={handleBiometricLogin}
+              disabled={loading}
+              className="w-full bg-slate-800 hover:bg-slate-700 border border-emerald-500/30 text-emerald-400 font-bold py-4 rounded-xl shadow-lg transition-all flex flex-col items-center justify-center gap-2"
+            >
+              {loading ? <Loader2 className="w-8 h-8 animate-spin"/> : <Fingerprint className="w-8 h-8" />}
+              <span>Unlock with Biometrics</span>
+            </button>
+            <div className="relative my-6">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-slate-800"></div>
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-slate-900 px-2 text-slate-500">Or use password</span>
+              </div>
+            </div>
           </div>
         )}
 

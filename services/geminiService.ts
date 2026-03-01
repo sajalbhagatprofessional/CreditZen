@@ -89,19 +89,26 @@ const callOpenAICompatible = async (config: AISettings, messages: any[], maxToke
     max_tokens: maxTokens
   };
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body)
-  });
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body)
+    });
 
-  if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`${config.provider} API Error: ${err}`);
+    if (!response.ok) {
+      const err = await response.text();
+      throw new Error(`${config.provider} API Error: ${err}`);
+    }
+
+    const data = await response.json();
+    return data.choices[0]?.message?.content || "";
+  } catch (error: any) {
+    if (error.message === 'Failed to fetch') {
+      throw new Error("Network error. Please check your connection.");
+    }
+    throw error;
   }
-
-  const data = await response.json();
-  return data.choices[0]?.message?.content || "";
 };
 
 /**
@@ -129,19 +136,26 @@ const callAnthropic = async (config: AISettings, messages: any[]) => {
     messages: messages
   };
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body)
-  });
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body)
+    });
 
-  if (!response.ok) {
-     const err = await response.text();
-     throw new Error(`Anthropic API Error: ${err}`);
+    if (!response.ok) {
+       const err = await response.text();
+       throw new Error(`Anthropic API Error: ${err}`);
+    }
+    
+    const data = await response.json();
+    return data.content[0]?.text || "";
+  } catch (error: any) {
+    if (error.message === 'Failed to fetch') {
+      throw new Error("Network error. Please check your connection.");
+    }
+    throw error;
   }
-  
-  const data = await response.json();
-  return data.content[0]?.text || "";
 };
 
 
@@ -253,9 +267,95 @@ export const askCreditCoach = async (question: string, contextCards: CreditCard[
 };
 
 /**
- * Uses Google Gemini's Location Grounding (Maps Tool) to recommend cards.
- * This is a provider-exclusive feature.
+ * Extracts credit card details from an image using Gemini Vision.
+ * Returns a partial CreditCard object to populate the form.
  */
+export const extractCardDetails = async (file: File): Promise<Partial<CreditCard>> => {
+  if (!checkOnline()) throw new Error("Offline. Cannot scan card.");
+
+  const config = await getAIConfig();
+  const base64Data = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+
+  const promptText = `
+    Analyze this credit card image. Extract the following details in JSON format:
+    - issuer (e.g., Chase, Amex, Citi)
+    - name (e.g., Sapphire Preferred, Gold Card)
+    - network (Visa, Mastercard, Amex, Discover)
+    - last4 (Last 4 digits of account number)
+    - expiryDate (MM/YY format)
+    - cardholder (Name on card)
+    
+    If a field is not visible, return null.
+    Do NOT invent information.
+    
+    Response Format:
+    {
+      "issuer": "string",
+      "name": "string",
+      "network": "string",
+      "last4": "string",
+      "expiryDate": "string",
+      "cardholder": "string"
+    }
+  `;
+
+  try {
+    let jsonStr = "";
+    
+    if (config.provider === 'google') {
+       const response = await callGoogleGemini(config, {
+         parts: [
+           { inlineData: { mimeType: file.type, data: base64Data } },
+           { text: promptText }
+         ]
+       });
+       jsonStr = response;
+    } else if (config.provider === 'openai' || config.provider === 'custom') {
+       const dataUrl = `data:${file.type};base64,${base64Data}`;
+       const messages = [
+         {
+           role: 'user',
+           content: [
+             { type: 'text', text: promptText },
+             { type: 'image_url', image_url: { url: dataUrl } }
+           ]
+         }
+       ];
+       jsonStr = await callOpenAICompatible(config, messages);
+    } else if (config.provider === 'anthropic') {
+       const messages = [
+         {
+           role: 'user',
+           content: [
+             { 
+               type: 'image', 
+               source: { 
+                 type: 'base64', 
+                 media_type: file.type as any, 
+                 data: base64Data 
+               } 
+             },
+             { type: 'text', text: promptText }
+           ]
+         }
+       ];
+       jsonStr = await callAnthropic(config, messages);
+    }
+
+    // Clean and parse JSON
+    const cleanJson = jsonStr.replace(/```json/g, '').replace(/```/g, '').trim();
+    return JSON.parse(cleanJson);
+
+  } catch (error: any) {
+    console.error("Card Scan Error:", error);
+    throw new Error(`Failed to scan card: ${error.message}`);
+  }
+};
 export const recommendCardAtLocation = async (
   latitude: number,
   longitude: number,

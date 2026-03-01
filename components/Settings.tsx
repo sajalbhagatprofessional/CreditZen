@@ -1,8 +1,9 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { Download, Upload, Trash2, AlertTriangle, Check, FileJson, Bot, Save, Key, LogOut } from 'lucide-react';
+import { Download, Upload, Trash2, AlertTriangle, Check, FileJson, Bot, Save, Key, LogOut, Fingerprint, Loader2 } from 'lucide-react';
 import { exportWalletJSON, importWalletJSON, getSettings, saveSettings } from '../services/storageService';
 import { AISettings, AIProvider } from '../types';
 import { DEFAULT_AI_SETTINGS } from '../constants';
+import { isBiometricAvailable, isBiometricEnabled, enableBiometrics, disableBiometrics } from '../services/authService';
 
 interface SettingsProps {
   onLogout?: () => void;
@@ -16,15 +17,44 @@ export const Settings: React.FC<SettingsProps> = ({ onLogout }) => {
   const [aiConfig, setAiConfig] = useState<AISettings>(DEFAULT_AI_SETTINGS);
   const [showKey, setShowKey] = useState(false);
   
+  // Biometric State
+  const [canUseBiometrics, setCanUseBiometrics] = useState(false);
+  const [biometricsActive, setBiometricsActive] = useState(false);
+  const [isBioLoading, setIsBioLoading] = useState(false);
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const loadData = async () => {
       const { ai } = await getSettings();
       setAiConfig(ai);
+      
+      const bioAvailable = await isBiometricAvailable();
+      setCanUseBiometrics(bioAvailable);
+      setBiometricsActive(isBiometricEnabled());
     };
     loadData();
   }, []);
+
+  const handleToggleBiometrics = async () => {
+    setIsBioLoading(true);
+    try {
+      if (biometricsActive) {
+        disableBiometrics();
+        setBiometricsActive(false);
+        setStatus("Biometric login disabled.");
+      } else {
+        await enableBiometrics();
+        setBiometricsActive(true);
+        setStatus("Biometric login enabled.");
+      }
+    } catch (e: any) {
+      setStatus(`Error: ${e.message}`);
+    } finally {
+      setIsBioLoading(false);
+      setTimeout(() => setStatus(''), 3000);
+    }
+  };
 
   const handleSaveAI = async () => {
     const { notifications } = await getSettings();
@@ -262,6 +292,30 @@ export const Settings: React.FC<SettingsProps> = ({ onLogout }) => {
         </h2>
         
         <div className="space-y-4">
+           {canUseBiometrics && (
+             <div className="bg-slate-950/50 border border-slate-800 p-4 rounded-lg flex justify-between items-center">
+               <div>
+                 <h3 className="font-semibold text-white mb-1 flex items-center gap-2">
+                   <Fingerprint className="w-4 h-4 text-emerald-400" /> Biometric Unlock
+                 </h3>
+                 <p className="text-xs text-slate-400">
+                   Use FaceID/TouchID to unlock your vault for 7 days.
+                 </p>
+               </div>
+               <button 
+                 onClick={handleToggleBiometrics}
+                 disabled={isBioLoading}
+                 className={`px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors border ${
+                   biometricsActive 
+                     ? 'bg-emerald-600/20 border-emerald-600/50 text-emerald-400' 
+                     : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
+                 }`}
+               >
+                 {isBioLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : (biometricsActive ? 'Enabled' : 'Enable')}
+               </button>
+             </div>
+           )}
+
            {onLogout && (
              <div className="bg-slate-950/50 border border-slate-800 p-4 rounded-lg flex justify-between items-center">
                <div>
