@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { loginUser, registerUser, isBiometricEnabled, verifyBiometric, restoreSession } from '../services/authService';
+import { loginUser, registerUser, isBiometricEnabled, isBiometricAvailable, verifyBiometric, restoreSession } from '../services/authService';
 import { ShieldCheck, Lock, Mail, Loader2, AlertTriangle, Fingerprint } from 'lucide-react';
 
 interface AuthProps {
@@ -16,13 +16,19 @@ export const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
   const [showBiometric, setShowBiometric] = useState(false);
 
   useEffect(() => {
-    if (isBiometricEnabled()) {
-      setShowBiometric(true);
-    }
+    const checkBio = async () => {
+      const enabled = isBiometricEnabled();
+      const available = await isBiometricAvailable();
+      if (enabled && available) {
+        setShowBiometric(true);
+      }
+    };
+    checkBio();
   }, []);
 
   const handleBiometricLogin = async () => {
     setLoading(true);
+    setError("");
     try {
       const verified = await verifyBiometric();
       if (verified) {
@@ -34,10 +40,11 @@ export const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
           setShowBiometric(false);
         }
       } else {
-        setError("Biometric verification failed.");
+        setError("Biometric verification failed. Make sure you have enabled it in settings.");
       }
-    } catch (e) {
-      setError("Biometric error.");
+    } catch (e: any) {
+      console.error("Biometric login error:", e);
+      setError(`Biometric error: ${e.message || "Unknown error"}`);
     } finally {
       setLoading(false);
     }

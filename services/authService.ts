@@ -36,54 +36,87 @@ const base64ToUint8Array = (base64: string) => {
   return bytes;
 };
 
+// Helper to check if running in an iframe
+const isIframe = () => {
+  try {
+    return window.self !== window.top;
+  } catch (e) {
+    return true;
+  }
+};
+
 export const isBiometricAvailable = async (): Promise<boolean> => {
+  if (isIframe()) return false;
   if (!window.PublicKeyCredential) return false;
-  return await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+  
+  try {
+    // Check if platform authenticator is available (Fingerprint, Face, etc.)
+    const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+    return available;
+  } catch (e) {
+    console.error("Error checking biometric availability:", e);
+    return false;
+  }
 };
 
 export const enableBiometrics = async () => {
-  if (!await isBiometricAvailable()) throw new Error("Biometrics not supported");
+  if (!await isBiometricAvailable()) {
+    if (isIframe()) throw new Error("Biometrics cannot be enabled inside a preview iframe. Please open the app in a new tab.");
+    throw new Error("Biometrics not supported or no screen lock set up on this device.");
+  }
   
   const challenge = new Uint8Array(32);
   window.crypto.getRandomValues(challenge);
   
   const userId = currentUser?.id || "default-user";
   const userBuffer = new TextEncoder().encode(userId);
+  const rpId = window.location.hostname;
 
   // Clear any old credential first to avoid confusion
   localStorage.removeItem(SESSION_BIOMETRIC_CRED_ID);
 
-  const credential = await navigator.credentials.create({
-    publicKey: {
-      challenge,
-      rp: { name: "CreditZen" }, // Browser handles ID automatically
-      user: {
-        id: userBuffer,
-        name: currentUser?.username || "User",
-        displayName: currentUser?.username || "User"
-      },
-      pubKeyCredParams: [
-        { alg: -7, type: "public-key" }, // ES256
-        { alg: -257, type: "public-key" } // RS256
-      ],
-      authenticatorSelection: { 
-        authenticatorAttachment: "platform", 
-        userVerification: "required",
-        residentKey: "preferred"
-      },
-      timeout: 60000
-    }
-  }) as PublicKeyCredential;
+  try {
+    const credential = await navigator.credentials.create({
+      publicKey: {
+        challenge,
+        rp: { 
+          name: "CreditZen",
+          id: rpId 
+        },
+        user: {
+          id: userBuffer,
+          name: currentUser?.username || "User",
+          displayName: currentUser?.username || "User"
+        },
+        pubKeyCredParams: [
+          { alg: -7, type: "public-key" }, // ES256
+          { alg: -257, type: "public-key" } // RS256
+        ],
+        authenticatorSelection: { 
+          authenticatorAttachment: "platform", 
+          userVerification: "required",
+          residentKey: "required" // Better for Android "Passkeys"
+        },
+        timeout: 60000
+      }
+    }) as PublicKeyCredential;
 
-  if (credential) {
-    const credId = bufferToBase64(credential.rawId);
-    localStorage.setItem(SESSION_BIOMETRIC_CRED_ID, credId);
-    localStorage.setItem(SESSION_BIOMETRIC_ENABLED, 'true');
-    
-    // Refresh session with longer expiry
-    if (currentSessionKey && currentUser) {
-        await persistSession(currentSessionKey, currentUser);
+    if (credential) {
+      const credId = bufferToBase64(credential.rawId);
+      localStorage.setItem(SESSION_BIOMETRIC_CRED_ID, credId);
+      localStorage.setItem(SESSION_BIOMETRIC_ENABLED, 'true');
+      
+      // Refresh session with longer expiry
+      if (currentSessionKey && currentUser) {
+          await persistSession(currentSessionKey, currentUser);
+      }
     }
+  } catch (err: any) {
+    console.error("Failed to create biometric credential:", err);
+    if (err.name === 'NotAllowedError') {
+      throw new Error("Biometric setup was cancelled.");
+    }
+    throw new Error(`Biometric setup failed: ${err.message}`);
   }
 };
 
@@ -102,30 +135,40 @@ export const isBiometricEnabled = () => {
 };
 
 export const verifyBiometric = async (): Promise<boolean> => {
-  try {
-    const challenge = new Uint8Array(32);
-    window.crypto.getRandomValues(challenge);
-    
-    const credId = localStorage.getItem(SESSION_BIOMETRIC_CRED_ID);
-    if (!credId) throw new Error("No biometric credential found");
+  const challenge = new Uint8Array(32);
+  window.crypto.getRandomValues(challenge);
+  
+  const credId = localStorage.getItem(SESSION_BIOMETRIC_CRED_ID);
+  if (!credId) throw new Error("Biometrics not enabled on this device.");
 
-    const allowCredentials = [{
-      id: base64ToUint8Array(credId),
-      type: 'public-key' as const
-    }];
-    
-    await navigator.credentials.get({
+  const rpId = window.location.hostname;
+  const allowCredentials = [{
+    id: base64ToUint8Array(credId),
+    type: 'public-key' as const
+  }];
+  
+  try {
+    const credential = await navigator.credentials.get({
       publicKey: {
         challenge,
+        rpId,
         allowCredentials,
         userVerification: "required",
         timeout: 60000
       }
     });
+    
+    if (!credential) return false;
     return true;
-  } catch (e) {
+  } catch (e: any) {
     console.error("Biometric verification failed", e);
-    return false;
+    if (e.name === 'NotAllowedError') {
+      throw new Error("Biometric verification cancelled or timed out.");
+    }
+    if (e.name === 'SecurityError') {
+      throw new Error("Security error: The domain does not match the biometric credential.");
+    }
+    throw new Error(`Biometric verification failed: ${e.message}`);
   }
 };
 
