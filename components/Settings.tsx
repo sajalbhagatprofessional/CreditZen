@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { Download, Upload, Trash2, AlertTriangle, Check, FileJson, Bot, Save, Key, LogOut, Fingerprint, Loader2 } from 'lucide-react';
+import { Download, Upload, Trash2, AlertTriangle, Check, FileJson, Bot, Save, Key, LogOut, Fingerprint, Loader2, Smartphone } from 'lucide-react';
 import { exportWalletJSON, importWalletJSON, getSettings, saveSettings } from '../services/storageService';
 import { AISettings, AIProvider } from '../types';
 import { DEFAULT_AI_SETTINGS } from '../constants';
@@ -7,9 +7,10 @@ import { isBiometricAvailable, isBiometricEnabled, enableBiometrics, disableBiom
 
 interface SettingsProps {
   onLogout?: () => void;
+  deferredPrompt?: any;
 }
 
-export const Settings: React.FC<SettingsProps> = ({ onLogout }) => {
+export const Settings: React.FC<SettingsProps> = ({ onLogout, deferredPrompt }) => {
   const [importMode, setImportMode] = useState<'append' | 'replace'>('append');
   const [status, setStatus] = useState<string>('');
   
@@ -35,6 +36,16 @@ export const Settings: React.FC<SettingsProps> = ({ onLogout }) => {
     };
     loadData();
   }, []);
+
+  const handleInstall = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setStatus("Installation accepted!");
+    }
+    setTimeout(() => setStatus(''), 3000);
+  };
 
   const handleToggleBiometrics = async () => {
     setIsBioLoading(true);
@@ -282,6 +293,39 @@ export const Settings: React.FC<SettingsProps> = ({ onLogout }) => {
             </button>
           </div>
         </div>
+      </div>
+
+      {/* App Installation Section */}
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+        <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+          <Smartphone className="w-6 h-6 text-emerald-400" />
+          App Installation
+        </h2>
+        
+        {deferredPrompt ? (
+          <>
+            <p className="text-sm text-slate-400 mb-6">
+              Install CreditZen on your device for a native experience, offline access, and quick shortcuts.
+            </p>
+            <button 
+              onClick={handleInstall}
+              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-lg shadow-lg shadow-emerald-900/20 transition-all flex justify-center items-center gap-2"
+            >
+              <Smartphone className="w-5 h-5" /> Install CreditZen
+            </button>
+          </>
+        ) : (
+          <div className="space-y-4">
+            <p className="text-sm text-slate-400">
+              To install CreditZen on your device:
+            </p>
+            <div className="bg-slate-950/50 p-4 rounded-lg border border-slate-800 text-xs text-slate-300 space-y-2">
+              <p><strong>iOS (Safari):</strong> Tap the <span className="text-emerald-400">Share</span> button and select <span className="text-emerald-400">"Add to Home Screen"</span>.</p>
+              <p><strong>Android (Chrome):</strong> Tap the <span className="text-emerald-400">three dots</span> menu and select <span className="text-emerald-400">"Install app"</span> or <span className="text-emerald-400">"Add to Home screen"</span>.</p>
+              <p><strong>Desktop:</strong> Look for the <span className="text-emerald-400">Install</span> icon in your browser's address bar.</p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Account Section */}

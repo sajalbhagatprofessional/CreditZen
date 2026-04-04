@@ -31,9 +31,17 @@ const App: React.FC = () => {
   // Auth State
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
 
   // --- Initialization & Auth Check ---
   useEffect(() => {
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    
     const initAuth = async () => {
       // checkSession() attempts to restore the encryption key from local storage
       // if the session is still valid (within 20 mins).
@@ -64,7 +72,10 @@ const App: React.FC = () => {
       }
     };
     window.addEventListener('online', handleOnline);
-    return () => window.removeEventListener('online', handleOnline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
   }, []);
 
   // --- Event Handlers ---
@@ -182,7 +193,7 @@ const App: React.FC = () => {
         {activeTab === 'coach' && <AICoach cards={cards} />}
 
         {/* Settings View */}
-        {activeTab === 'settings' && <Settings onLogout={handleLogout} />}
+        {activeTab === 'settings' && <Settings onLogout={handleLogout} deferredPrompt={deferredPrompt} />}
       </Layout>
 
       {/* Global Card Form Modal */}
