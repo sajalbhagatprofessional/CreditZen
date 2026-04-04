@@ -14,7 +14,7 @@ export default defineConfig(({ mode }) => {
         react(),
         VitePWA({
           registerType: 'autoUpdate',
-          injectRegister: 'auto',
+          injectRegister: 'inline',
           includeAssets: ['icon.svg'],
           manifest: {
             id: '/',
@@ -37,7 +37,10 @@ export default defineConfig(({ mode }) => {
             ]
           },
           workbox: {
-            globPatterns: ['**/*.{js,css,html,ico,png,svg,json}'],
+            globPatterns: ['**/*.{js,css,html,ico,png,svg,json,webmanifest}'],
+            cleanupOutdatedCaches: true,
+            clientsClaim: true,
+            skipWaiting: true,
             runtimeCaching: [
               {
                 urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
@@ -96,6 +99,10 @@ export default defineConfig(({ mode }) => {
                 }
               }
             ]
+          },
+          devOptions: {
+            enabled: true,
+            type: 'module'
           }
         })
       ],

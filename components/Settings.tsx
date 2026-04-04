@@ -8,9 +8,10 @@ import { isBiometricAvailable, isBiometricEnabled, enableBiometrics, disableBiom
 interface SettingsProps {
   onLogout?: () => void;
   deferredPrompt?: any;
+  isInstalled?: boolean;
 }
 
-export const Settings: React.FC<SettingsProps> = ({ onLogout, deferredPrompt }) => {
+export const Settings: React.FC<SettingsProps> = ({ onLogout, deferredPrompt, isInstalled }) => {
   const [importMode, setImportMode] = useState<'append' | 'replace'>('append');
   const [status, setStatus] = useState<string>('');
   
@@ -38,7 +39,10 @@ export const Settings: React.FC<SettingsProps> = ({ onLogout, deferredPrompt }) 
   }, []);
 
   const handleInstall = async () => {
-    if (!deferredPrompt) return;
+    if (!deferredPrompt) {
+      setStatus("Installation not available. Try opening in a new tab.");
+      return;
+    }
     deferredPrompt.prompt();
     const { outcome } = await deferredPrompt.userChoice;
     if (outcome === 'accepted') {
@@ -302,7 +306,17 @@ export const Settings: React.FC<SettingsProps> = ({ onLogout, deferredPrompt }) 
           App Installation
         </h2>
         
-        {deferredPrompt ? (
+        {isInstalled ? (
+          <div className="bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-lg flex items-center gap-3">
+            <div className="bg-emerald-500 p-2 rounded-full">
+              <Check className="w-4 h-4 text-white" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-emerald-400">CreditZen is Installed</p>
+              <p className="text-xs text-slate-400">You are running the standalone version.</p>
+            </div>
+          </div>
+        ) : deferredPrompt ? (
           <>
             <p className="text-sm text-slate-400 mb-6">
               Install CreditZen on your device for a native experience, offline access, and quick shortcuts.
@@ -324,6 +338,7 @@ export const Settings: React.FC<SettingsProps> = ({ onLogout, deferredPrompt }) 
               <p><strong>Android (Chrome):</strong> Tap the <span className="text-emerald-400">three dots</span> menu and select <span className="text-emerald-400">"Install app"</span> or <span className="text-emerald-400">"Add to Home screen"</span>.</p>
               <p><strong>Desktop:</strong> Look for the <span className="text-emerald-400">Install</span> icon in your browser's address bar.</p>
             </div>
+            <p className="text-[10px] text-slate-500 italic">Note: If you are in a preview iframe, you must open the app in a new tab to see the install button.</p>
           </div>
         )}
       </div>

@@ -32,15 +32,29 @@ const App: React.FC = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isInstalled, setIsInstalled] = useState(false);
 
   // --- Initialization & Auth Check ---
   useEffect(() => {
     const handleBeforeInstallPrompt = (e: Event) => {
+      console.log('beforeinstallprompt event fired');
       e.preventDefault();
       setDeferredPrompt(e);
     };
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    
+    // Check if already installed
+    if (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone) {
+      setIsInstalled(true);
+    }
+    
+    // Log service worker status
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.ready.then(registration => {
+        console.log('Service Worker is ready:', registration);
+      });
+    }
     
     const initAuth = async () => {
       // checkSession() attempts to restore the encryption key from local storage
@@ -193,7 +207,7 @@ const App: React.FC = () => {
         {activeTab === 'coach' && <AICoach cards={cards} />}
 
         {/* Settings View */}
-        {activeTab === 'settings' && <Settings onLogout={handleLogout} deferredPrompt={deferredPrompt} />}
+        {activeTab === 'settings' && <Settings onLogout={handleLogout} deferredPrompt={deferredPrompt} isInstalled={isInstalled} />}
       </Layout>
 
       {/* Global Card Form Modal */}
