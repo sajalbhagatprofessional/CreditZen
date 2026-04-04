@@ -36,17 +36,7 @@ const base64ToUint8Array = (base64: string) => {
   return bytes;
 };
 
-// Helper to check if running in an iframe
-const isIframe = () => {
-  try {
-    return window.self !== window.top;
-  } catch (e) {
-    return true;
-  }
-};
-
 export const isBiometricAvailable = async (): Promise<boolean> => {
-  if (isIframe()) return false;
   if (!window.PublicKeyCredential) return false;
   
   try {
@@ -61,8 +51,7 @@ export const isBiometricAvailable = async (): Promise<boolean> => {
 
 export const enableBiometrics = async () => {
   if (!await isBiometricAvailable()) {
-    if (isIframe()) throw new Error("Biometrics cannot be enabled inside a preview iframe. Please open the app in a new tab.");
-    throw new Error("Biometrics not supported or no screen lock set up on this device.");
+    throw new Error("Biometrics not supported or no screen lock set up on this device. If you are in a preview, please open the app in a new tab.");
   }
   
   const challenge = new Uint8Array(32);
@@ -95,7 +84,7 @@ export const enableBiometrics = async () => {
         authenticatorSelection: { 
           authenticatorAttachment: "platform", 
           userVerification: "required",
-          residentKey: "required" // Better for Android "Passkeys"
+          residentKey: "preferred" // Revert to preferred for better compatibility
         },
         timeout: 60000
       }
@@ -115,6 +104,9 @@ export const enableBiometrics = async () => {
     console.error("Failed to create biometric credential:", err);
     if (err.name === 'NotAllowedError') {
       throw new Error("Biometric setup was cancelled.");
+    }
+    if (err.name === 'SecurityError') {
+      throw new Error("Security error: The domain does not match or the context is insecure.");
     }
     throw new Error(`Biometric setup failed: ${err.message}`);
   }

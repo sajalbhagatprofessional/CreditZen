@@ -52,22 +52,27 @@ export const Settings: React.FC<SettingsProps> = ({ onLogout, deferredPrompt, is
   };
 
   const handleToggleBiometrics = async () => {
+    console.log("Toggling biometrics. Current state:", biometricsActive);
     setIsBioLoading(true);
+    setStatus("");
     try {
       if (biometricsActive) {
+        console.log("Disabling biometrics...");
         disableBiometrics();
         setBiometricsActive(false);
         setStatus("Biometric login disabled.");
       } else {
+        console.log("Enabling biometrics...");
         await enableBiometrics();
         setBiometricsActive(true);
         setStatus("Biometric login enabled.");
       }
     } catch (e: any) {
+      console.error("Biometric toggle error:", e);
       setStatus(`Error: ${e.message}`);
     } finally {
       setIsBioLoading(false);
-      setTimeout(() => setStatus(''), 3000);
+      setTimeout(() => setStatus(''), 5000);
     }
   };
 
@@ -222,8 +227,12 @@ export const Settings: React.FC<SettingsProps> = ({ onLogout, deferredPrompt, is
       </div>
 
       {status && (
-          <div className="mb-4 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-center gap-2 text-sm text-emerald-400 animate-fade-in">
-            <Check className="w-4 h-4" />
+          <div className={`mb-4 p-3 border rounded-lg flex items-center gap-2 text-sm animate-fade-in ${
+            status.startsWith('Error') 
+              ? 'bg-rose-500/10 border-rose-500/20 text-rose-400' 
+              : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+          }`}>
+            {status.startsWith('Error') ? <AlertTriangle className="w-4 h-4" /> : <Check className="w-4 h-4" />}
             {status}
           </div>
       )}
@@ -351,7 +360,7 @@ export const Settings: React.FC<SettingsProps> = ({ onLogout, deferredPrompt, is
         </h2>
         
         <div className="space-y-4">
-           {canUseBiometrics && (
+           {canUseBiometrics ? (
              <div className="bg-slate-950/50 border border-slate-800 p-4 rounded-lg flex justify-between items-center">
                <div>
                  <h3 className="font-semibold text-white mb-1 flex items-center gap-2">
@@ -372,6 +381,16 @@ export const Settings: React.FC<SettingsProps> = ({ onLogout, deferredPrompt, is
                >
                  {isBioLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : (biometricsActive ? 'Enabled' : 'Enable')}
                </button>
+             </div>
+           ) : (
+             <div className="bg-slate-950/50 border border-slate-800 p-4 rounded-lg">
+               <div className="flex items-center gap-2 text-amber-400 mb-1">
+                 <AlertTriangle className="w-4 h-4" />
+                 <h3 className="font-semibold text-sm">Biometrics Unavailable</h3>
+               </div>
+               <p className="text-xs text-slate-400">
+                 Biometric login requires a secure context (HTTPS), a device with a screen lock (PIN/Fingerprint), and the app to be opened in a new tab or installed.
+               </p>
              </div>
            )}
 
