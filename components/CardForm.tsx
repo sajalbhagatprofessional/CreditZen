@@ -81,7 +81,7 @@ export const CardForm: React.FC<CardFormProps> = ({ initialData, onSave, onCance
         // Map network if needed, or just store it
         lastFour: details.lastFour || prev.lastFour,
         expiryDate: details.expiryDate || prev.expiryDate,
-        cardHolderName: details.cardholder || prev.cardHolderName
+        cardHolderName: details.cardHolderName || prev.cardHolderName
       }));
       
       // If full number was somehow extracted (unlikely/unsafe via LLM usually, but if user wants)

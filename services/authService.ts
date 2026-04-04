@@ -15,10 +15,26 @@ const SESSION_KEY_STORAGE = 'creditzen_session_key';
 const SESSION_USER_STORAGE = 'creditzen_session_user';
 const SESSION_EXPIRY_STORAGE = 'creditzen_session_expiry';
 const SESSION_BIOMETRIC_ENABLED = 'creditzen_biometric_enabled';
+const SESSION_BIOMETRIC_CRED_ID = 'creditzen_biometric_cred_id';
 const SESSION_TIMEOUT_MS = 20 * 60 * 1000; // 20 minutes
 const BIOMETRIC_TIMEOUT_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 // --- Biometric Helpers ---
+
+// Helper to convert ArrayBuffer to Base64
+const bufferToBase64 = (buffer: ArrayBuffer) => {
+  return btoa(String.fromCharCode(...new Uint8Array(buffer)));
+};
+
+// Helper to convert Base64 to Uint8Array
+const base64ToUint8Array = (base64: string) => {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+};
 
 export const isBiometricAvailable = async (): Promise<boolean> => {
   if (!window.PublicKeyCredential) return false;
@@ -28,35 +44,52 @@ export const isBiometricAvailable = async (): Promise<boolean> => {
 export const enableBiometrics = async () => {
   if (!await isBiometricAvailable()) throw new Error("Biometrics not supported");
   
-  // Create a dummy credential to trigger the OS prompt and ensure permission
   const challenge = new Uint8Array(32);
   window.crypto.getRandomValues(challenge);
   
-  await navigator.credentials.create({
+  const userId = currentUser?.id || "default-user";
+  const userBuffer = new TextEncoder().encode(userId);
+
+  // Clear any old credential first to avoid confusion
+  localStorage.removeItem(SESSION_BIOMETRIC_CRED_ID);
+
+  const credential = await navigator.credentials.create({
     publicKey: {
       challenge,
-      rp: { name: "CreditZen" },
+      rp: { name: "CreditZen" }, // Browser handles ID automatically
       user: {
-        id: new Uint8Array(16),
+        id: userBuffer,
         name: currentUser?.username || "User",
         displayName: currentUser?.username || "User"
       },
-      pubKeyCredParams: [{ alg: -7, type: "public-key" }],
-      authenticatorSelection: { authenticatorAttachment: "platform", userVerification: "required" },
+      pubKeyCredParams: [
+        { alg: -7, type: "public-key" }, // ES256
+        { alg: -257, type: "public-key" } // RS256
+      ],
+      authenticatorSelection: { 
+        authenticatorAttachment: "platform", 
+        userVerification: "required",
+        residentKey: "preferred"
+      },
       timeout: 60000
     }
-  });
+  }) as PublicKeyCredential;
 
-  localStorage.setItem(SESSION_BIOMETRIC_ENABLED, 'true');
-  
-  // Refresh session with longer expiry
-  if (currentSessionKey && currentUser) {
-      await persistSession(currentSessionKey, currentUser);
+  if (credential) {
+    const credId = bufferToBase64(credential.rawId);
+    localStorage.setItem(SESSION_BIOMETRIC_CRED_ID, credId);
+    localStorage.setItem(SESSION_BIOMETRIC_ENABLED, 'true');
+    
+    // Refresh session with longer expiry
+    if (currentSessionKey && currentUser) {
+        await persistSession(currentSessionKey, currentUser);
+    }
   }
 };
 
 export const disableBiometrics = () => {
   localStorage.removeItem(SESSION_BIOMETRIC_ENABLED);
+  localStorage.removeItem(SESSION_BIOMETRIC_CRED_ID);
   // Reset expiry to short term
   if (currentSessionKey && currentUser) {
       persistSession(currentSessionKey, currentUser);
@@ -64,7 +97,8 @@ export const disableBiometrics = () => {
 };
 
 export const isBiometricEnabled = () => {
-  return localStorage.getItem(SESSION_BIOMETRIC_ENABLED) === 'true';
+  return localStorage.getItem(SESSION_BIOMETRIC_ENABLED) === 'true' && 
+         !!localStorage.getItem(SESSION_BIOMETRIC_CRED_ID);
 };
 
 export const verifyBiometric = async (): Promise<boolean> => {
@@ -72,10 +106,18 @@ export const verifyBiometric = async (): Promise<boolean> => {
     const challenge = new Uint8Array(32);
     window.crypto.getRandomValues(challenge);
     
+    const credId = localStorage.getItem(SESSION_BIOMETRIC_CRED_ID);
+    if (!credId) throw new Error("No biometric credential found");
+
+    const allowCredentials = [{
+      id: base64ToUint8Array(credId),
+      type: 'public-key' as const
+    }];
+    
     await navigator.credentials.get({
       publicKey: {
         challenge,
-        rpId: window.location.hostname,
+        allowCredentials,
         userVerification: "required",
         timeout: 60000
       }

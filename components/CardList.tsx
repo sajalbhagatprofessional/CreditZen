@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { CreditCard } from '../types';
-import { ExternalLink, Edit2, Trash2, Calendar, AlertTriangle, ShieldCheck, Key, Info, CreditCard as CardIcon, Wallet } from 'lucide-react';
+import { ExternalLink, Edit2, Trash2, Calendar, AlertTriangle, ShieldCheck, Key, Info, CreditCard as CardIcon, Wallet, AlertCircle } from 'lucide-react';
 import { differenceInDays, addMonths, setDate, startOfDay, isBefore } from 'date-fns';
 import { SecureCardModal } from './SecureCardModal';
+import { motion, AnimatePresence } from 'motion/react';
 
 interface CardListProps {
   cards: CreditCard[];
@@ -13,6 +14,7 @@ interface CardListProps {
 export const CardList: React.FC<CardListProps> = ({ cards, onEdit, onDelete }) => {
   const [viewingCard, setViewingCard] = useState<CreditCard | null>(null);
   const [expandedNotes, setExpandedNotes] = useState<Set<string>>(new Set());
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const toggleNotes = (id: string) => {
     const newSet = new Set(expandedNotes);
@@ -26,14 +28,7 @@ export const CardList: React.FC<CardListProps> = ({ cards, onEdit, onDelete }) =
     if (/android/i.test(userAgent)) {
       window.open('https://wallet.google.com', '_blank');
     } else if (/iPad|iPhone|iPod/.test(userAgent) && !(window as any).MSStream) {
-      // Try to open Apple Wallet via scheme, fallback to alert
       window.location.href = 'shoebox://';
-      setTimeout(() => {
-        // If the app didn't open (we are still here), show a message
-        // Note: This check is not perfect in modern browsers but is a common pattern
-        // For PWA, we can't easily know if it worked.
-        // We'll just let it try.
-      }, 500);
     } else {
       window.open('https://wallet.google.com', '_blank');
     }
@@ -53,21 +48,34 @@ export const CardList: React.FC<CardListProps> = ({ cards, onEdit, onDelete }) =
   const getCardStyle = (card: CreditCard) => {
     const name = (card.issuer + card.name).toLowerCase();
     
+    // Premium / Specific Brands
     if (name.includes('sapphire') || name.includes('preferred')) 
-      return 'bg-gradient-to-br from-blue-900 via-blue-700 to-indigo-900 border-blue-500/30';
+      return 'bg-gradient-to-br from-[#0a192f] via-[#112240] to-[#0a192f] border-blue-500/30 shadow-[0_0_20px_rgba(59,130,246,0.2)]';
     if (name.includes('freedom') || name.includes('cash')) 
-      return 'bg-gradient-to-br from-slate-800 via-slate-600 to-slate-800 border-slate-500/30';
+      return 'bg-gradient-to-br from-[#1e293b] via-[#334155] to-[#1e293b] border-slate-500/30';
     if (name.includes('gold') || name.includes('amex')) 
-      return 'bg-gradient-to-br from-yellow-700 via-amber-500 to-yellow-800 border-amber-400/30';
+      return 'bg-gradient-to-br from-[#b8860b] via-[#ffd700] to-[#b8860b] border-yellow-400/30 text-slate-900 shadow-[0_0_20px_rgba(251,191,36,0.3)]';
     if (name.includes('platinum')) 
-      return 'bg-gradient-to-br from-slate-400 via-slate-300 to-slate-500 border-slate-300/40 text-slate-900';
-    if (name.includes('red') || name.includes('target')) 
-      return 'bg-gradient-to-br from-red-900 via-red-700 to-rose-900 border-red-500/30';
-    if (name.includes('green') || name.includes('eco')) 
-      return 'bg-gradient-to-br from-emerald-900 via-emerald-700 to-green-900 border-emerald-500/30';
-      
-    // Default Dark Holographic
-    return 'bg-gradient-to-br from-slate-900 via-slate-800 to-slate-950 border-slate-700/50';
+      return 'bg-gradient-to-br from-[#e5e7eb] via-[#f9fafb] to-[#d1d5db] border-slate-300/40 text-slate-900 shadow-[0_0_20px_rgba(255,255,255,0.2)]';
+    if (name.includes('red') || name.includes('target') || name.includes('apple')) 
+      return 'bg-gradient-to-br from-[#7f1d1d] via-[#b91c1c] to-[#7f1d1d] border-red-500/30 shadow-[0_0_20px_rgba(239,68,68,0.2)]';
+    if (name.includes('green') || name.includes('eco') || name.includes('fidelity')) 
+      return 'bg-gradient-to-br from-[#064e3b] via-[#059669] to-[#064e3b] border-emerald-500/30 shadow-[0_0_20px_rgba(16,185,129,0.2)]';
+    if (name.includes('venture') || name.includes('capital one'))
+      return 'bg-gradient-to-br from-[#1e1b4b] via-[#312e81] to-[#1e1b4b] border-indigo-500/30 shadow-[0_0_20px_rgba(99,102,241,0.2)]';
+    if (name.includes('quicksilver'))
+      return 'bg-gradient-to-br from-[#4b5563] via-[#9ca3af] to-[#4b5563] border-slate-400/30 shadow-[0_0_20px_rgba(156,163,175,0.2)]';
+
+    // Fallback based on ID to ensure uniqueness
+    const colors = [
+      'from-purple-900 via-fuchsia-800 to-purple-950 border-purple-500/30 shadow-[0_0_20px_rgba(168,85,247,0.2)]',
+      'from-cyan-900 via-sky-800 to-cyan-950 border-cyan-500/30 shadow-[0_0_20px_rgba(6,182,212,0.2)]',
+      'from-orange-900 via-amber-800 to-orange-950 border-orange-500/30 shadow-[0_0_20px_rgba(245,158,11,0.2)]',
+      'from-pink-900 via-rose-800 to-pink-950 border-pink-500/30 shadow-[0_0_20px_rgba(244,63,94,0.2)]',
+      'from-teal-900 via-emerald-800 to-teal-950 border-teal-500/30 shadow-[0_0_20px_rgba(20,184,166,0.2)]'
+    ];
+    const hash = card.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    return colors[hash % colors.length];
   };
 
   if (cards.length === 0) {
@@ -87,6 +95,46 @@ export const CardList: React.FC<CardListProps> = ({ cards, onEdit, onDelete }) =
       {viewingCard && (
         <SecureCardModal card={viewingCard} onClose={() => setViewingCard(null)} />
       )}
+
+      <AnimatePresence>
+        {deletingId && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4"
+          >
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-slate-900 border border-slate-800 p-6 rounded-2xl max-w-sm w-full shadow-2xl"
+            >
+              <div className="flex items-center gap-3 text-rose-500 mb-4">
+                <AlertCircle className="w-6 h-6" />
+                <h3 className="text-lg font-bold">Delete Card?</h3>
+              </div>
+              <p className="text-slate-400 text-sm mb-6">
+                This action cannot be undone. All encrypted data for this card will be permanently removed.
+              </p>
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setDeletingId(null)}
+                  className="flex-1 bg-slate-800 hover:bg-slate-700 text-white py-2 rounded-lg font-medium transition-colors"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={() => { onDelete(deletingId); setDeletingId(null); }}
+                  className="flex-1 bg-rose-600 hover:bg-rose-500 text-white py-2 rounded-lg font-medium transition-colors"
+                >
+                  Delete
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       
       {cards.map((card, idx) => {
         const nextDue = getNextDate(card.dueDay);
@@ -98,19 +146,30 @@ export const CardList: React.FC<CardListProps> = ({ cards, onEdit, onDelete }) =
         const isLightCard = cardStyle.includes('text-slate-900');
 
         return (
-          <div 
+          <motion.div 
             key={card.id} 
-            className="group relative transition-all duration-500 ease-out hover:scale-[1.02] hover:-translate-y-1"
-            style={{ animationDelay: `${idx * 100}ms` }}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: idx * 0.1 }}
+            className="group relative"
           >
             {/* 3D Card Face */}
-            <div className={`relative overflow-hidden rounded-2xl border p-6 shadow-2xl transition-all duration-500 ${cardStyle} ${isLightCard ? 'text-slate-900' : 'text-white'}`}>
+            <motion.div 
+              whileHover={{ 
+                rotateX: 5, 
+                rotateY: -5, 
+                scale: 1.02,
+                z: 50
+              }}
+              className={`relative overflow-hidden rounded-2xl border p-6 shadow-2xl transition-all duration-500 ${cardStyle} ${isLightCard ? 'text-slate-900' : 'text-white'}`}
+              style={{ transformStyle: 'preserve-3d' }}
+            >
                 
                 {/* Holographic Glare Effect */}
-                <div className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/5 to-white/0 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none transform translate-x-[-100%] group-hover:translate-x-[100%] transition-transform ease-in-out" style={{ transitionDuration: '1s' }}></div>
+                <div className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/10 to-white/0 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none transform translate-x-[-100%] group-hover:translate-x-[100%] transition-transform ease-in-out" style={{ transitionDuration: '1.5s' }}></div>
                 <div className="absolute -top-24 -right-24 w-48 h-48 bg-white/10 rounded-full blur-3xl group-hover:bg-white/20 transition-all"></div>
 
-                <div className="relative z-10 flex justify-between items-start mb-8">
+                <div className="relative z-10 flex justify-between items-start mb-8" style={{ transform: 'translateZ(30px)' }}>
                   <div className="flex flex-col">
                     <span className={`text-[10px] font-bold tracking-[0.2em] uppercase mb-1 opacity-70`}>{card.issuer}</span>
                     <h3 className="text-xl font-bold tracking-wide drop-shadow-md">{card.name}</h3>
@@ -122,7 +181,7 @@ export const CardList: React.FC<CardListProps> = ({ cards, onEdit, onDelete }) =
                   </div>
                 </div>
 
-                <div className="relative z-10 flex justify-between items-end">
+                <div className="relative z-10 flex justify-between items-end" style={{ transform: 'translateZ(20px)' }}>
                     <div className="flex flex-col gap-1">
                         <span className="text-[9px] uppercase tracking-widest opacity-60">Card Number</span>
                         <div className="font-mono text-lg tracking-widest flex gap-2 items-center opacity-90">
@@ -133,7 +192,7 @@ export const CardList: React.FC<CardListProps> = ({ cards, onEdit, onDelete }) =
                     {/* Chip Icon */}
                     <div className={`w-10 h-8 rounded-md border bg-gradient-to-br from-yellow-200 to-yellow-500 opacity-80 shadow-inner ${isLightCard ? 'border-slate-500/30' : 'border-white/30'}`}></div>
                 </div>
-            </div>
+            </motion.div>
 
             {/* Floating Action Bar (Appears below card) */}
             <div className="mt-3 flex items-center justify-between px-2">
@@ -171,7 +230,7 @@ export const CardList: React.FC<CardListProps> = ({ cards, onEdit, onDelete }) =
                     <button onClick={() => onEdit(card)} className="p-2 bg-slate-800/50 hover:bg-blue-500/20 hover:text-blue-400 rounded-full transition-colors border border-slate-700/50">
                        <Edit2 className="w-4 h-4" />
                     </button>
-                    <button onClick={() => onDelete(card.id)} className="p-2 bg-slate-800/50 hover:bg-rose-500/20 hover:text-rose-400 rounded-full transition-colors border border-slate-700/50">
+                    <button onClick={() => setDeletingId(card.id)} className="p-2 bg-slate-800/50 hover:bg-rose-500/20 hover:text-rose-400 rounded-full transition-colors border border-slate-700/50">
                        <Trash2 className="w-4 h-4" />
                     </button>
                     {card.notes && (
@@ -191,7 +250,7 @@ export const CardList: React.FC<CardListProps> = ({ cards, onEdit, onDelete }) =
             
             {/* Divider for aesthetic spacing */}
             <div className="h-px w-full bg-gradient-to-r from-transparent via-slate-800 to-transparent mt-6 mb-2"></div>
-          </div>
+          </motion.div>
         );
       })}
     </div>

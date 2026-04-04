@@ -129,11 +129,9 @@ const App: React.FC = () => {
   };
 
   const handleDeleteCard = async (id: string) => {
-    if (confirm("Are you sure you want to delete this card?")) {
-      const newCards = cards.filter(c => c.id !== id);
-      setCards(newCards);
-      await saveCards(newCards);
-    }
+    const newCards = cards.filter(c => c.id !== id);
+    setCards(newCards);
+    await saveCards(newCards);
   };
 
   const openEdit = (card: CreditCard) => {

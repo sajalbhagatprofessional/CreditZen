@@ -288,7 +288,7 @@ export const extractCardDetails = async (file: File): Promise<Partial<CreditCard
     - network (Visa, Mastercard, Amex, Discover)
     - last4 (Last 4 digits of account number)
     - expiryDate (MM/YY format)
-    - cardholder (Name on card)
+    - cardHolderName (Name on card)
     
     If a field is not visible, return null.
     Do NOT invent information.
@@ -300,7 +300,7 @@ export const extractCardDetails = async (file: File): Promise<Partial<CreditCard
       "network": "string",
       "last4": "string",
       "expiryDate": "string",
-      "cardholder": "string"
+      "cardHolderName": "string"
     }
   `;
 
