@@ -2,6 +2,10 @@
   "name": "CreditZen",
   "description": "An expert-designed PWA for credit card management, score optimization via statement date targeting, and benefit maximization.",
   "requestFramePermissions": [
-    "geolocation"
+    "geolocation",
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
   ]
 }

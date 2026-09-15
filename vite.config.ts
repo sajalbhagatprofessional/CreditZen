@@ -14,30 +14,78 @@ export default defineConfig(({ mode }) => {
         react(),
         VitePWA({
           registerType: 'autoUpdate',
-          injectRegister: 'inline',
-          includeAssets: ['icon.svg'],
+          injectRegister: 'auto',
+          includeAssets: [
+            'icon.svg',
+            'pwa-192x192.png',
+            'pwa-512x512.png',
+            'pwa-maskable-512x512.png',
+            'apple-touch-icon.png'
+          ],
           manifest: {
             id: '/',
             name: 'CreditZen',
             short_name: 'CreditZen',
-            description: 'AI-Powered Credit Manager & Optimizer',
+            description: 'AI-Powered Credit Manager, Statement Optimizer & Vault',
             theme_color: '#020617',
             background_color: '#020617',
             display: 'standalone',
             orientation: 'portrait',
             scope: '/',
             start_url: '/',
+            categories: ['finance', 'productivity', 'utilities'],
             icons: [
               {
-                src: 'icon.svg',
+                src: '/pwa-192x192.png',
+                sizes: '192x192',
+                type: 'image/png',
+                purpose: 'any'
+              },
+              {
+                src: '/pwa-512x512.png',
+                sizes: '512x512',
+                type: 'image/png',
+                purpose: 'any'
+              },
+              {
+                src: '/pwa-maskable-512x512.png',
+                sizes: '512x512',
+                type: 'image/png',
+                purpose: 'maskable'
+              },
+              {
+                src: '/icon.svg',
                 sizes: 'any',
                 type: 'image/svg+xml',
-                purpose: 'any maskable'
+                purpose: 'any'
+              }
+            ],
+            shortcuts: [
+              {
+                name: 'Add Card',
+                short_name: 'Add',
+                description: 'Add a new card to your vault',
+                url: '/?action=add-card',
+                icons: [{ src: '/pwa-192x192.png', sizes: '192x192' }]
+              },
+              {
+                name: 'Wallet',
+                short_name: 'Wallet',
+                description: 'View your stored cards',
+                url: '/?tab=wallet',
+                icons: [{ src: '/pwa-192x192.png', sizes: '192x192' }]
+              },
+              {
+                name: 'Boost & Optimizer',
+                short_name: 'Boost',
+                description: 'Optimize rewards and statement dates',
+                url: '/?tab=optimizer',
+                icons: [{ src: '/pwa-192x192.png', sizes: '192x192' }]
               }
             ]
           },
           workbox: {
-            globPatterns: ['**/*.{js,css,html,ico,png,svg,json,webmanifest}'],
+            globPatterns: ['**/*.{js,css,html,ico,png,svg,json,webmanifest,woff,woff2}'],
             cleanupOutdatedCaches: true,
             clientsClaim: true,
             skipWaiting: true,

@@ -24,6 +24,8 @@ export const DEFAULT_NOTIFICATIONS = {
   daysBeforeDue: 3
 };
 
+export const DEFAULT_NOTIFICATION_SETTINGS = DEFAULT_NOTIFICATIONS;
+
 export const DEFAULT_AI_SETTINGS: AISettings = {
   provider: 'google',
   modelId: 'gemini-3-flash-preview',

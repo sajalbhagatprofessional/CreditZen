@@ -3,22 +3,26 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>CreditZen - Expert Credit Manager</title>
+    <title>CreditZen</title>
+    <meta name="description" content="An expert-designed PWA for credit card management, score optimization via statement date targeting, and benefit maximization." />
     
-    <!-- PWA Configuration -->
-    <link rel="icon" type="image/svg+xml" href="/icon.svg">
-    <link rel="apple-touch-icon" href="/icon.svg">
+    <!-- PWA Icons & Splash -->
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/pwa-192x192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/pwa-512x512.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     
     <!-- Android / Chrome Specific -->
-    <meta name="theme-color" content="#020617">
-    <meta name="mobile-web-app-capable" content="yes">
-    <meta name="application-name" content="CreditZen">
+    <meta name="theme-color" content="#020617" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="application-name" content="CreditZen" />
     
     <!-- iOS Specific -->
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="CreditZen">
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="CreditZen" />
 
+    <link rel="stylesheet" href="/index.css" />
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
@@ -114,20 +118,6 @@
       }
     </style>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-  <script type="importmap">
-{
-  "imports": {
-    "react-markdown": "https://esm.sh/react-markdown@^10.1.0",
-    "lucide-react": "https://esm.sh/lucide-react@^0.563.0",
-    "date-fns": "https://esm.sh/date-fns@^4.1.0",
-    "react/": "https://esm.sh/react@^19.2.3/",
-    "react": "https://esm.sh/react@^19.2.3",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
-    "@google/genai": "https://esm.sh/@google/genai@^1.38.0"
-  }
-}
-</script>
-<link rel="stylesheet" href="/index.css">
 </head>
   <body class="bg-slate-950 text-slate-100 antialiased overflow-x-hidden selection:bg-emerald-500 selection:text-white">
     <div id="root"></div>
