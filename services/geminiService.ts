@@ -1,20 +1,15 @@
-import { GoogleGenAI } from "@google/genai";
 import { MOCK_ADVICE_PROMPT, DEFAULT_AI_SETTINGS } from '../constants';
 import { CreditCard, AISettings } from '../types';
 import { getSettings } from './storageService';
 
 // --- Gemini Service ---
-// Handles all interactions with AI providers (Google Gemini, OpenAI, Anthropic).
-// It abstracts the differences between providers to offer a unified API for the app.
+// Handles all interactions with AI providers (Google Gemini via server-side API, OpenAI, Anthropic).
+// Ensures Gemini API calls and credentials remain strictly server-side.
 
 // --- Internal Helper: Fetch AI Configuration ---
-// Retrieves the current AI settings, falling back to environment variables if needed.
 const getAIConfig = async (): Promise<AISettings> => {
   const { ai } = await getSettings();
-  if (!ai.apiKey && ai.provider === 'google' && process.env.API_KEY) {
-     return { ...ai, apiKey: process.env.API_KEY };
-  }
-  return ai;
+  return ai || DEFAULT_AI_SETTINGS;
 };
 
 // Helper to check network status
@@ -25,49 +20,10 @@ const checkOnline = (): boolean => {
   return true;
 };
 
-// --- API Clients ---
-
-/**
- * Calls the Google Gemini API using the official SDK.
- * Supports text generation, multimodal inputs (images), and tools (Maps).
- */
-const callGoogleGemini = async (config: AISettings, prompt: string | any, systemInstruction?: string, tools?: any[]) => {
-  if (!config.apiKey) throw new Error("Google API Key missing");
-  
-  const client = new GoogleGenAI({ apiKey: config.apiKey });
-  
-  // Construct options
-  const options: any = {
-     model: config.modelId,
-     contents: prompt,
-  };
-  
-  if (tools) {
-    options.config = { tools };
-    // Add location tool config if present
-    if (tools.some(t => t.googleMaps)) {
-       // Assuming prompt is the contents object which might contain toolConfig in the caller. 
-       // In @google/genai, tools are in config.
-    }
-  }
-
-  // Handle system instruction if strictly needed, though usually part of contents or config
-  if (systemInstruction) {
-     options.config = { ...options.config, systemInstruction };
-  }
-  
-  // Thinking config for 3.0 models if no tools are used
-  if (!tools && config.modelId.includes('gemini-3')) {
-    options.config = { ...options.config, thinkingConfig: { thinkingBudget: 0 } };
-  }
-
-  const response = await client.models.generateContent(options);
-  return response.text;
-};
+// --- API Clients for 3rd Party Providers ---
 
 /**
  * Calls OpenAI-compatible APIs (OpenAI, DeepSeek, Ollama, etc.).
- * Uses standard REST endpoints.
  */
 const callOpenAICompatible = async (config: AISettings, messages: any[], maxTokens = 1024) => {
   const apiKey = config.apiKey;
@@ -81,10 +37,8 @@ const callOpenAICompatible = async (config: AISettings, messages: any[], maxToke
     'Authorization': `Bearer ${apiKey}`
   };
 
-  // If using OpenRouter or similar, they might need extra headers, but standard is Bearer.
-  
   const body = {
-    model: config.modelId,
+    model: config.modelId || 'gpt-4o',
     messages: messages,
     max_tokens: maxTokens
   };
@@ -113,25 +67,21 @@ const callOpenAICompatible = async (config: AISettings, messages: any[], maxToke
 
 /**
  * Calls Anthropic API.
- * Note: Client-side calls to Anthropic often fail CORS unless a proxy is used.
  */
 const callAnthropic = async (config: AISettings, messages: any[]) => {
   if (!config.apiKey) throw new Error("Anthropic API Key missing");
 
-  // Note: Direct browser calls to Anthropic often fail CORS.
-  // This expects the user to have a CORS proxy or similar setup if using pure PWA.
-  // We will try standard endpoint.
   const url = 'https://api.anthropic.com/v1/messages';
   
   const headers: any = {
     'x-api-key': config.apiKey,
     'anthropic-version': '2023-06-01',
     'content-type': 'application/json',
-    'dangerously-allow-browser': 'true' // Anthropic specific header for client-side
+    'dangerously-allow-browser': 'true'
   };
 
   const body = {
-    model: config.modelId,
+    model: config.modelId || 'claude-3-5-sonnet-20241022',
     max_tokens: 1024,
     messages: messages
   };
@@ -158,12 +108,10 @@ const callAnthropic = async (config: AISettings, messages: any[]) => {
   }
 };
 
-
 // --- Exported Services ---
 
 /**
  * Processes a credit card document (PDF/Image) to extract fee/benefit info.
- * Supports multimodal inputs for Gemini, OpenAI Vision, and Anthropic.
  */
 export const processCardDocument = async (file: File): Promise<string> => {
   if (!checkOnline()) throw new Error("Offline. Cannot process documents.");
@@ -182,48 +130,58 @@ export const processCardDocument = async (file: File): Promise<string> => {
     2. APR Rates
     3. Insurance/Protections
     4. Reward Categories & Multipliers
-    Summarize concisely.
+    Summarize concisely in Markdown.
   `;
 
   try {
     if (config.provider === 'google') {
-       return await callGoogleGemini(config, {
-         parts: [
-           { inlineData: { mimeType: file.type, data: base64Data } },
-           { text: promptText }
-         ]
-       });
+      const res = await fetch('/api/gemini/process-document', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mimeType: file.type || 'image/jpeg',
+          base64Data,
+          customApiKey: config.apiKey || undefined
+        })
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({ error: 'Server processing failed' }));
+        throw new Error(errJson.error || 'Server processing error');
+      }
+
+      const data = await res.json();
+      return data.text;
     } else if (config.provider === 'openai' || config.provider === 'custom') {
-       // OpenAI Vision format
-       const dataUrl = `data:${file.type};base64,${base64Data}`;
-       const messages = [
-         {
-           role: 'user',
-           content: [
-             { type: 'text', text: promptText },
-             { type: 'image_url', image_url: { url: dataUrl } }
-           ]
-         }
-       ];
-       return await callOpenAICompatible(config, messages);
+      const dataUrl = `data:${file.type};base64,${base64Data}`;
+      const messages = [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: promptText },
+            { type: 'image_url', image_url: { url: dataUrl } }
+          ]
+        }
+      ];
+      return await callOpenAICompatible(config, messages);
     } else if (config.provider === 'anthropic') {
-       const messages = [
-         {
-           role: 'user',
-           content: [
-             { 
-               type: 'image', 
-               source: { 
-                 type: 'base64', 
-                 media_type: file.type as any, 
-                 data: base64Data 
-               } 
-             },
-             { type: 'text', text: promptText }
-           ]
-         }
-       ];
-       return await callAnthropic(config, messages);
+      const messages = [
+        {
+          role: 'user',
+          content: [
+            { 
+              type: 'image', 
+              source: { 
+                type: 'base64', 
+                media_type: file.type as any, 
+                data: base64Data 
+              } 
+            },
+            { type: 'text', text: promptText }
+          ]
+        }
+      ];
+      return await callAnthropic(config, messages);
     }
   } catch (error: any) {
     console.error("AI Document Processing Error:", error);
@@ -249,16 +207,32 @@ export const askCreditCoach = async (question: string, contextCards: CreditCard[
      return `CARD: ${c.issuer} ${c.name}\nBENEFITS: ${perm} ${temp ? `| TEMP: ${temp}` : ''}\n${docs || ''}`;
   }).join('\n---\n');
 
-  const fullPrompt = `${MOCK_ADVICE_PROMPT}\n\nUser Data:\n${cardSummary}\n\nQuestion: ${question}`;
-
   try {
     if (config.provider === 'google') {
-      return await callGoogleGemini(config, fullPrompt);
-    } else if (config.provider === 'anthropic') {
-      return await callAnthropic(config, [{ role: 'user', content: fullPrompt }]);
+      const res = await fetch('/api/gemini/coach', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question,
+          cardSummary,
+          customApiKey: config.apiKey || undefined
+        })
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({ error: 'AI Coach request failed' }));
+        return `Error from AI Coach: ${errJson.error || 'Request failed'}`;
+      }
+
+      const data = await res.json();
+      return data.text || "No response received from AI Coach.";
     } else {
-      // OpenAI / Custom
-      return await callOpenAICompatible(config, [{ role: 'user', content: fullPrompt }]);
+      const fullPrompt = `${MOCK_ADVICE_PROMPT}\n\nUser Data:\n${cardSummary}\n\nQuestion: ${question}`;
+      if (config.provider === 'anthropic') {
+        return await callAnthropic(config, [{ role: 'user', content: fullPrompt }]);
+      } else {
+        return await callOpenAICompatible(config, [{ role: 'user', content: fullPrompt }]);
+      }
     }
   } catch (error: any) {
     console.error("AI Coach Error:", error);
@@ -267,7 +241,7 @@ export const askCreditCoach = async (question: string, contextCards: CreditCard[
 };
 
 /**
- * Extracts credit card details from an image using Gemini Vision.
+ * Extracts credit card details from an image using Gemini Vision server-side.
  * Returns a partial CreditCard object to populate the form.
  */
 export const extractCardDetails = async (file: File): Promise<Partial<CreditCard>> => {
@@ -305,57 +279,70 @@ export const extractCardDetails = async (file: File): Promise<Partial<CreditCard
   `;
 
   try {
-    let jsonStr = "";
-    
     if (config.provider === 'google') {
-       const response = await callGoogleGemini(config, {
-         parts: [
-           { inlineData: { mimeType: file.type, data: base64Data } },
-           { text: promptText }
-         ]
-       });
-       jsonStr = response;
-    } else if (config.provider === 'openai' || config.provider === 'custom') {
-       const dataUrl = `data:${file.type};base64,${base64Data}`;
-       const messages = [
-         {
-           role: 'user',
-           content: [
-             { type: 'text', text: promptText },
-             { type: 'image_url', image_url: { url: dataUrl } }
-           ]
-         }
-       ];
-       jsonStr = await callOpenAICompatible(config, messages);
-    } else if (config.provider === 'anthropic') {
-       const messages = [
-         {
-           role: 'user',
-           content: [
-             { 
-               type: 'image', 
-               source: { 
-                 type: 'base64', 
-                 media_type: file.type as any, 
-                 data: base64Data 
-               } 
-             },
-             { type: 'text', text: promptText }
-           ]
-         }
-       ];
-       jsonStr = await callAnthropic(config, messages);
+      const res = await fetch('/api/gemini/scan-card', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mimeType: file.type || 'image/jpeg',
+          base64Data,
+          customApiKey: config.apiKey || undefined
+        })
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({ error: 'Card scan failed' }));
+        throw new Error(errJson.error || 'Card scan failed');
+      }
+
+      const data = await res.json();
+      return data.details || {};
+    } else {
+      let jsonStr = "";
+      if (config.provider === 'openai' || config.provider === 'custom') {
+        const dataUrl = `data:${file.type};base64,${base64Data}`;
+        const messages = [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: promptText },
+              { type: 'image_url', image_url: { url: dataUrl } }
+            ]
+          }
+        ];
+        jsonStr = await callOpenAICompatible(config, messages);
+      } else if (config.provider === 'anthropic') {
+        const messages = [
+          {
+            role: 'user',
+            content: [
+              { 
+                type: 'image', 
+                source: { 
+                  type: 'base64', 
+                  media_type: file.type as any, 
+                  data: base64Data 
+                } 
+              },
+              { type: 'text', text: promptText }
+            ]
+          }
+        ];
+        jsonStr = await callAnthropic(config, messages);
+      }
+
+      const cleanJson = jsonStr.replace(/```json/g, '').replace(/```/g, '').trim();
+      return JSON.parse(cleanJson);
     }
-
-    // Clean and parse JSON
-    const cleanJson = jsonStr.replace(/```json/g, '').replace(/```/g, '').trim();
-    return JSON.parse(cleanJson);
-
   } catch (error: any) {
     console.error("Card Scan Error:", error);
     throw new Error(`Failed to scan card: ${error.message}`);
   }
 };
+
+/**
+ * Recommends best credit card based on geolocation.
+ */
 export const recommendCardAtLocation = async (
   latitude: number,
   longitude: number,
@@ -365,7 +352,6 @@ export const recommendCardAtLocation = async (
 
   const config = await getAIConfig();
 
-  // Location Grounding is EXCLUSIVE to Gemini Models via the GoogleGenAI SDK tools
   if (config.provider !== 'google') {
     return `⚠️ **Provider Limitation**: Location Intelligence (Google Maps Grounding) is currently only supported when using the **Google Gemini** provider. Please switch providers in Settings to use this feature.`;
   }
@@ -374,31 +360,25 @@ export const recommendCardAtLocation = async (
     `ID: ${c.id}, Name: ${c.issuer} ${c.name}, Benefits: ${c.benefits.map(b => `${b.category}:${b.multiplier}x`).join(', ')}`
   ).join('\n');
 
-  const prompt = `
-    I am at lat:${latitude}, long:${longitude}.
-    1. Use Google Maps to identify the place.
-    2. Determine spending category.
-    3. Recommend best card from my list:
-    ${cardContext}
-    
-    Output Format:
-    ### 📍 [Place Name]
-    **Category:** [Category]
-    **Recommended:** ✨ [Card Name]
-    **Why:** [Reason]
-  `;
-
   try {
-     const client = new GoogleGenAI({ apiKey: config.apiKey || process.env.API_KEY || '' });
-     const response = await client.models.generateContent({
-      model: 'gemini-2.5-flash', // Force 2.5 for Maps Tool compatibility
-      contents: prompt,
-      config: {
-        tools: [{ googleMaps: {} }],
-        toolConfig: { retrievalConfig: { latLng: { latitude, longitude } } }
-      }
+    const res = await fetch('/api/gemini/recommend-location', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        latitude,
+        longitude,
+        cardContext,
+        customApiKey: config.apiKey || undefined
+      })
     });
-    return response.text;
+
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => ({ error: 'Location recommendation failed' }));
+      return `Location recommendation error: ${errJson.error || 'Server error'}`;
+    }
+
+    const data = await res.json();
+    return data.text || "No recommendation found for this location.";
   } catch (error: any) {
     console.error("Gemini Location Error:", error);
     return `Location Scan Failed: ${error.message}`;
