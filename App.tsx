@@ -93,27 +93,31 @@ const App: React.FC = () => {
     
     // 3. Service Worker Lifecycle & Update Detection
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.ready.then(registration => {
-        swRegistrationRef.current = registration;
+      navigator.serviceWorker.ready
+        .then(registration => {
+          swRegistrationRef.current = registration;
 
-        // Check if there is already a waiting worker
-        if (registration.waiting) {
-          setUpdateAvailable(true);
-        }
-
-        // Listen for new worker updates
-        registration.addEventListener('updatefound', () => {
-          const newWorker = registration.installing;
-          if (newWorker) {
-            newWorker.addEventListener('statechange', () => {
-              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                // New content available!
-                setUpdateAvailable(true);
-              }
-            });
+          // Check if there is already a waiting worker
+          if (registration.waiting) {
+            setUpdateAvailable(true);
           }
+
+          // Listen for new worker updates
+          registration.addEventListener('updatefound', () => {
+            const newWorker = registration.installing;
+            if (newWorker) {
+              newWorker.addEventListener('statechange', () => {
+                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                  // New content available!
+                  setUpdateAvailable(true);
+                }
+              });
+            }
+          });
+        })
+        .catch(err => {
+          console.warn('Service worker registration ready warning:', err);
         });
-      });
 
       // Reload smoothly when new SW takes control
       let refreshing = false;
@@ -127,27 +131,38 @@ const App: React.FC = () => {
     
     // 4. Auth & Vault Initialization
     const initAuth = async () => {
-      const hasSession = await checkSession();
-      
-      if (hasSession && isAuthenticated()) {
-        setIsLoggedIn(true);
-        const loadedCards = await getCards();
-        setCards(loadedCards);
-        runBackgroundTasks(loadedCards);
-      } else {
+      try {
+        const hasSession = await checkSession();
+        
+        if (hasSession && isAuthenticated()) {
+          setIsLoggedIn(true);
+          const loadedCards = await getCards();
+          setCards(loadedCards);
+          runBackgroundTasks(loadedCards);
+        } else {
+          setIsLoggedIn(false);
+        }
+      } catch (authInitErr) {
+        console.warn('Auth initialization warning:', authInitErr);
         setIsLoggedIn(false);
+      } finally {
+        setIsLoading(false);
       }
-      setIsLoading(false);
     };
     initAuth();
 
     // 5. Network restoration sync
     const handleOnline = () => {
       if (isAuthenticated()) {
-        syncData().then(() => getCards().then(loaded => {
-          setCards(loaded);
-          runBackgroundTasks(loaded);
-        }));
+        syncData()
+          .then(() => getCards())
+          .then(loaded => {
+            setCards(loaded);
+            runBackgroundTasks(loaded);
+          })
+          .catch(syncErr => {
+            console.warn('Background sync on reconnect warning:', syncErr);
+          });
       }
     };
     window.addEventListener('online', handleOnline);
@@ -155,10 +170,14 @@ const App: React.FC = () => {
     // 6. App Visibility / Focus Lifecycle Check (Background wake-up)
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible' && isAuthenticated()) {
-        getCards().then(loaded => {
-          setCards(loaded);
-          runBackgroundTasks(loaded);
-        });
+        getCards()
+          .then(loaded => {
+            setCards(loaded);
+            runBackgroundTasks(loaded);
+          })
+          .catch(refreshErr => {
+            console.warn('Background cards refresh warning:', refreshErr);
+          });
       }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);

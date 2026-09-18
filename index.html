@@ -2,6 +2,36 @@
 <html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      (function() {
+        // Intercept third-party browser extension noise (e.g. MetaMask in sandboxed iframes)
+        function isExtensionError(err) {
+          if (!err) return false;
+          var msg = (typeof err === 'string') ? err : (err.message || err.stack || err.name || String(err));
+          return /MetaMask|ethereum|chrome-extension:\/\/|moz-extension:\/\/|safari-extension:\/\//i.test(msg);
+        }
+
+        window.addEventListener('unhandledrejection', function(event) {
+          if (isExtensionError(event.reason)) {
+            event.preventDefault();
+            if (typeof event.stopImmediatePropagation === 'function') {
+              event.stopImmediatePropagation();
+            }
+            return true;
+          }
+        }, true);
+
+        window.addEventListener('error', function(event) {
+          if (isExtensionError(event.message) || isExtensionError(event.error)) {
+            event.preventDefault();
+            if (typeof event.stopImmediatePropagation === 'function') {
+              event.stopImmediatePropagation();
+            }
+            return true;
+          }
+        }, true);
+      })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>CreditZen</title>
     <meta name="description" content="An expert-designed PWA for credit card management, score optimization via statement date targeting, and benefit maximization." />

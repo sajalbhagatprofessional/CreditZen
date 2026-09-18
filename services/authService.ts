@@ -45,16 +45,20 @@ export const isBiometricAvailable = async (): Promise<boolean> => {
     return false;
   }
   
+  // Browsers disallow or restrict WebAuthn inside cross-origin / sandboxed iframes.
+  // Querying WebAuthn in an iframe can also cause wallet extensions (like MetaMask) to intercept and fail.
   try {
-    if (PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable) {
-      const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
-      // Even if false on some browsers before user gesture, return true if PublicKeyCredential exists
-      return available !== false;
+    if (window.self !== window.top) {
+      return false;
     }
-    return true;
+    if (typeof PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable === 'function') {
+      const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+      return Boolean(available);
+    }
+    return false;
   } catch (e) {
     console.warn("PublicKeyCredential check warning:", e);
-    return true;
+    return false;
   }
 };
 
@@ -146,6 +150,10 @@ export const enableBiometrics = async (): Promise<void> => {
       })) as PublicKeyCredential;
     } catch (fallbackErr: any) {
       console.error("Fallback credential creation failed:", fallbackErr);
+      const errMsg = fallbackErr?.message || '';
+      if (/MetaMask|ethereum/i.test(errMsg)) {
+        throw new Error("A wallet extension intercepted device authentication. Please unlock with your passcode.");
+      }
       if (fallbackErr.name === 'NotAllowedError') {
         throw new Error("Biometric setup was cancelled or timed out.");
       }
@@ -239,6 +247,10 @@ export const verifyBiometric = async (): Promise<boolean> => {
     return restored;
   } catch (e: any) {
     console.error("Biometric verification error:", e);
+    const errMsg = e?.message || '';
+    if (/MetaMask|ethereum/i.test(errMsg)) {
+      throw new Error("A wallet extension intercepted device authentication. Please unlock with your passcode.");
+    }
     if (e.name === 'NotAllowedError') {
       throw new Error("Biometric scan cancelled or timed out.");
     }
